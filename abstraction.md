@@ -34,3 +34,4 @@
 Запрос (тип, вход, выход,  юрл, реакция на ошибку)
 Инпут, Кнопка и т.д.
 ![image](https://user-images.githubusercontent.com/19908027/216803181-3a66a191-af31-4eac-95f8-3bf73205e283.png)
+https://miro.com/app/board/uXjVPqyG2Do=/
