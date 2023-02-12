@@ -7,18 +7,29 @@
 ### 2. Помимо того, что код должен быть читаемым, код должеен быть тестируемым.
   Очень часто пишут о том, что код должен быть легкочитаемым, легкоподдерживаемый, но куда реже можно найти статьи, где будет написано о том, что код должен быть еще и  тестируемым. Если вам легко написать на код тест, скорее всего это значит, что код легко читается, и у него простая логика. Если у него простая логика и код понятный, значит его легко поддерживать в будущем.
   
-  В различных языках, библиотека и фреймворка есть свои конструкции, которые легче тестировать чем другие. Например, в Angular протеститровать сервис проще и дешевле, чем компонент. Это связано как минимум с тем, сервис тестируется как обычный класс, в то время как у компонента есть еще шаблон, взаимодействие с которым нужно тоже протестировать, если [хуки жизненного цикла](https://angular.io/guide/lifecycle-hooks). В качестве примера можно взять простую задачу - получение каких-то данных с бэкенда и их отображение. Нам потребуется получить данные, произвести какие-нибудь преобразования и вывести их в шаблоне. Част
+  В различных языках, библиотека и фреймворка есть свои конструкции, которые легче тестировать чем другие. Например, в Angular протеститровать сервис проще и дешевле, чем компонент. Это связано как минимум с тем, сервис тестируется как обычный класс, в то время как у компонента есть еще шаблон, взаимодействие с которым нужно тоже протестировать, если [хуки жизненного цикла](https://angular.io/guide/lifecycle-hooks). В качестве примера можно взять простую задачу - получение каких-то данных с бэкенда и их отображение. Нам потребуется получить данные, произвести какие-нибудь преобразования и вывести их в шаблоне. Часто стречал картину, когда данные получают в хуке `ngOnInit`, там же преобразовывали, там же обрабатывали ошибку ит .д.
+
+
 
 ```
+export class UserService {
+    constructor(private http: HttpClient) { }
+
+    public getUsers<User>(): Observable<User> {
+        const url = 'https://example.com/getUsers';
+
+        return this.http.get<User>(url);
+}
+
+
+
 export class UsersComponent implements OnInit{
   users$: Observable<User>;
   
-  constructor(private errorService: ErrorService, private httpClient: HttpClient) {}
+  constructor(private errorService: ErrorService, private userService: UserService) {}
 
   ngOnInit(): void {
-    const url = 'https://example.com/getUsers';
-
-        this.users$ = this.http.get<User>(url).pipe(
+    this.users$ = this.userService.getUsers.pipe(
                     take(1),
                     catchError(error => {
                         this.errorService.showNotification('get users error');
@@ -29,55 +40,50 @@ export class UsersComponent implements OnInit{
                    );
   }
 }
+```
 
+Чем плох такой подход для тестов. Во первых, компонент не только показыват данные, но и производит кучу различных манипуляций с данными.
+Для того, чтобы проверить отобразится ли у нас нотификация, нам нужно провести ряд действий, в том числе инициализировать компонент.
+Также стоит отметить, что это у нас может быть не только отображению юзеров в компоненте, а если будут и другие подписки, то возможно, потребуется мокать логику получения юзеров, чтобы проверить другие подписки.
 
-export class UserService {
-    constructor(private http: HttpClient) { }
-
-    public getUsers<User>(): Observable<User> {
-        const url = 'https://example.com/getUsers';
-
-        return this.http.get<User>(url).pipe(
-                    take(1),
-                    catchError(error => {
-                        this.errorService.showNotification('get users error');
-                        
-                        return of([])
-                    }),
-                    map(users => ...))
-                   );
-    }
-}
-
-
-
-
-// У нас есть сервис для запроса данных с бэкенда
-
-export class UserService {
-    constructor(private http: HttpClient) { }
-
-    public getUsers<User>(): Observable<User> {
-        const url = 'https://example.com/getUsers';
-
-        return this.http.get<User>(url).pipe(
-                    take(1),
-                    catchError(error => {
-                        this.errorService.showNotification('get users error');
-                        
-                        return of([])
-                    }),
-                    map(users => ...))
-                   );
-    }
-}
-
-// 
-
-В упрощенном тесте будет лишь проверка того, какие view нам вернет новый сервис.
-У компонента будет одна зависимость. И не нужно запариваться за кучу моков и  тестов и т.д. Тестируем только view-часть
+Давайте перенесем логику в сервис, а в самом компоненте оставим только подписку на данные.
 
 ```
+export class UserService {
+    constructor(private http: HttpClient) { }
+
+    public getUsers$<User>(): Observable<User> {
+        const url = 'https://example.com/getUsers';
+
+        return this.http.get<User>(url).pipe(
+                    take(1),
+                    catchError(error => {
+                        this.errorService.showNotification('get users error');
+                        
+                        return of([])
+                    }),
+                    map(users => ...))
+                   );
+    }
+}
+
+export class UsersComponent implements OnInit{
+  users$: Observable<User>;
+  
+  constructor(private userService: UserService) {}
+
+  ngOnInit(): void {
+     this.users$ = this.userService.getUsers$();
+  }
+}
+```
+
+Что получим в итоге:
+Логика обработки данных будет инкапсулирована в сервисе. Соответственно для тестирования нам достаточно замокировать один сервис и для каждого теста на отображение передавать нужные данные.
+В сервисе же мы протестируем логику, но в данном случае нам не потребуется уже работать с компонентом. Логика также инкапсулирована в сервисе.
+
+
+
 
 
 Также стоит сделать акцент на введении правильных абстракций в коде. Каждая абстракция будет иметь четкие границы ответственности. Также одним из ограничений, мы задаем входные и выходные значения.
